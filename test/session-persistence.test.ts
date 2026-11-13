@@ -203,6 +203,24 @@ test("parseSessionRecord migrates records saved under earlier built-in commands"
   }
 });
 
+test("parseSessionRecord keeps standalone Antigravity sessions on their original backend", () => {
+  for (const argv of [
+    ["agy_acp_server.par"],
+    ["agy_acp_server.par", "--uid="],
+    ["agy_acp_server.exe"],
+  ]) {
+    const command = argv.join(" ");
+    for (const savedArgv of [undefined, argv]) {
+      const parsed = parseSessionRecord(
+        serializeWithAgent("standalone-antigravity", command, savedArgv),
+      );
+      assert.ok(parsed);
+      assert.equal(parsed.agentCommand, command);
+      assert.deepEqual(parsed.agentArgv, savedArgv);
+    }
+  }
+});
+
 test("parseSessionRecord keeps custom launchers that are not earlier built-in defaults", () => {
   for (const [agentCommand, agentArgv] of [
     [PREVIOUS_CLAUDE_COMMAND, ["/opt/claude-agent-acp/bin/claude-agent-acp", "--debug"]],

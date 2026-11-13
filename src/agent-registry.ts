@@ -107,13 +107,9 @@ const AGENT_DEFINITIONS: Record<string, AgentDefinition> = {
   cursor: { name: "Cursor", argv: ["cursor-agent", "acp"] },
   copilot: { name: "GitHub Copilot", argv: ["copilot", "--acp", "--stdio"] },
   ante: { name: "Ante", argv: ["ante", "acp"], requiredCommands: ["ante-acp"] },
-  antigravity: {
-    name: "Google Antigravity",
-    argv:
-      process.platform === "win32"
-        ? ["agy_acp_server.exe"]
-        : ["agy_acp_server.par", ...(process.platform === "linux" ? ["--uid="] : [])],
-  },
+  // The CLI and standalone ACP runtime use separate session stores. Keep saved
+  // standalone launch identities intact instead of migrating them to `agy acp`.
+  antigravity: { name: "Google Antigravity", argv: ["agy", "acp"] },
   "deepseek-harness": { name: "DeepSeek Harness", argv: ["dsh", "--profile", "acp"] },
   devin: { name: "Devin", argv: ["devin", "acp"] },
   droid: { name: "Factory Droid", argv: ["droid", "exec", "--output-format", "acp"] },

@@ -1256,6 +1256,41 @@ test("integration: built-in deepseek-harness resolves to dsh --profile acp", asy
   });
 });
 
+for (const command of ["sessions", "probe"] as const) {
+  test(`integration: built-in antigravity ${command} launches agy acp`, async () => {
+    await withTempHome(async (homeDir) => {
+      const binDir = path.join(homeDir, "antigravity bin");
+      const argsLog = path.join(homeDir, "agy-args.jsonl");
+      await fs.mkdir(binDir);
+      await writeFakeHarnessAgent(binDir, "agy", argsLog);
+      const result = await runCli(
+        [
+          "--cwd",
+          homeDir,
+          "--format",
+          "json",
+          "antigravity",
+          ...(command === "sessions" ? ["sessions", "new", "--name", "test"] : ["probe"]),
+        ],
+        homeDir,
+        { env: { PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` } },
+      );
+      assert.equal(result.code, 0, result.stdout + result.stderr);
+      assert.deepEqual(JSON.parse((await fs.readFile(argsLog, "utf8")).trim()), ["acp"]);
+      const payload = JSON.parse(result.stdout.trim()) as Record<string, unknown>;
+      if (command === "sessions") {
+        assert.equal(payload.action, "session_ensured");
+        assert.equal(payload.created, true);
+        assert.equal(payload.name, "test");
+      } else {
+        assert.equal(payload.action, "probe");
+        assert.equal(payload.agent, "antigravity");
+        assert.equal(payload.models, null);
+      }
+    });
+  });
+}
+
 test("integration: built-in goose agent launches its native ACP server", async () => {
   await withTempHome(async (homeDir) => {
     const binDir = path.join(homeDir, "goose bin");
@@ -6088,6 +6123,7 @@ async function writeFakeHarnessAgent(
   binDir: string,
   name:
     | "ante"
+    | "agy"
     | "cursor-agent"
     | "dsh"
     | "droid"

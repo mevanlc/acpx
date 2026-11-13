@@ -77,17 +77,25 @@ test("registry overrides preserve prototype property names as own entries", () =
   });
 });
 
-test("antigravity uses the official ACP runtime and platform launch arguments", () => {
-  const expected =
-    process.platform === "win32"
-      ? ["agy_acp_server.exe"]
-      : ["agy_acp_server.par", ...(process.platform === "linux" ? ["--uid="] : [])];
+test("antigravity uses the native CLI ACP server", () => {
+  const expected = ["agy", "acp"];
   assert.deepEqual(AGENT_ARGV_REGISTRY.antigravity, expected);
   assert.equal(resolveAgentCommand("antigravity"), expected.join(" "));
   assert.equal(
     resolveAgentCommand("antigravity", { antigravity: "fleet-antigravity" }),
     "fleet-antigravity",
   );
+});
+
+test("public Antigravity inspection resolves the native CLI", () => {
+  const registry = createAgentRegistry({
+    resolveExecutable: (command) => (command === "agy" ? "/fixture/bin/agy" : undefined),
+  });
+  assert.deepEqual(registry.inspect("antigravity"), {
+    id: "antigravity",
+    name: "Google Antigravity",
+    launch: { kind: "installed", argv: ["/fixture/bin/agy", "acp"] },
+  });
 });
 
 test("resolveAgentCommand maps factory droid aliases to the droid command", () => {

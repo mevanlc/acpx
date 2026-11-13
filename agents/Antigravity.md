@@ -1,44 +1,22 @@
 # Antigravity
 
-`acpx antigravity` launches Google's official Antigravity ACP runtime. It is a
-separate download and sign-in from the Antigravity IDE and CLI. It does not wrap
-`agy --print` or the CLI's streaming JSON interface.
+`acpx antigravity` launches Antigravity CLI's native ACP server with `agy acp`.
+The server speaks ACP over stdio and uses the CLI's cached sign-in, settings,
+tools, and models. See [Google's ACP guide](https://antigravity.google/docs/cli/acp/).
 
 ## Installation and account setup
 
-Download the archive for your platform from the
-[official ACP registry](https://github.com/agentclientprotocol/registry/blob/main/antigravity-acp/agent.json).
-Keep its executable and `localharness_external` helper from the same release
-together. Make both executable on Linux/macOS and put the runtime directory on
-`PATH`, or override the agent command in your acpx config.
+Install Antigravity CLI and put `agy` on `PATH`. Verify that the installed
+version includes ACP support:
 
-The built-in command is `agy_acp_server.par --uid=` on Linux,
-`agy_acp_server.par` on macOS, and `agy_acp_server.exe` on Windows. The Linux
-argument follows the official registry. Set `ANTIGRAVITY_HARNESS_PATH` to the
-absolute path of the matching helper (`localharness_external.exe` on Windows).
-acpx does not download or update these binaries.
-
-The runtime owns authentication. Complete sign-in through an interactive ACP
-client before unattended use. Its account profile is rooted at `GEMINI_HOME`
-(default `~/.gemini`), not `HOME`. Select personal Google-account authentication
-in `<GEMINI_HOME>/antigravity-acp/settings.json`:
-
-```json
-{ "auth": { "type": "oauth-personal" } }
+```bash
+agy acp --help
 ```
 
-The official runtime can infer this method from its settings; an acpx
-`authCredentials` entry or dummy secret is not needed. Keep the same profile and
-credential-storage configuration used during sign-in. A dedicated profile avoids
-sharing writable state with another ACP client. `AGY_ACP_FORCE_FILE_STORAGE=1`
-selects profile-local credential storage; let the runtime manage that file.
-
-For a subscription-only unattended launcher, remove ambient Google/Gemini API
-keys and cloud credential/project variables, select personal OAuth explicitly,
-and reject browser sign-in with a clear setup error. Merely setting
-`GEMINI_HOME` does not implement that failure policy. Expired credentials may
-otherwise start interactive sign-in. Never commit or copy account tokens into
-project configuration.
+Sign in once with an interactive `agy` session or run `agy acp --login`, then
+retry acpx. The built-in profile requires no separate `agy_acp_server.par`
+download or `ANTIGRAVITY_HARNESS_PATH` setting. acpx does not install or update
+Antigravity CLI.
 
 ## Sessions and models
 
@@ -59,9 +37,43 @@ capabilities, and advertised authentication methods. Authentication methods do
 not establish login status. See [`probe`](../docs/CLI.md#probe-command) for the
 output fields.
 
-## User questions
+## Standalone ACP runtime
 
-Antigravity sends fixed-choice user questions through `session/request_permission`
+Earlier acpx versions defaulted to the separately downloaded
+`agy_acp_server.par` runtime (`agy_acp_server.exe` on Windows). It has its own
+account profile and native session storage. Saved standalone sessions keep their
+original launch identity and are not moved to `agy acp`.
+
+To keep using that runtime, configure an explicit agent command. For example,
+on macOS:
+
+```json
+{
+  "agents": {
+    "antigravity": { "argv": ["/absolute/path/to/agy_acp_server.par"] }
+  }
+}
+```
+
+Use the exact command and arguments previously used for a saved session to keep
+its acpx scope. Linux's standalone command includes `--uid=`. Windows uses
+`agy_acp_server.exe`.
+
+Download the matching runtime and `localharness_external` helper from the
+[official ACP registry](https://github.com/agentclientprotocol/registry/blob/main/antigravity-acp/agent.json).
+Set `ANTIGRAVITY_HARNESS_PATH` to the absolute helper path
+(`localharness_external.exe` on Windows). Make the files executable on Linux/macOS.
+
+The standalone profile is rooted at `GEMINI_HOME` (default `~/.gemini`). Complete
+sign-in through an interactive ACP client. For personal OAuth, set
+`auth.type` to `oauth-personal` in
+`<GEMINI_HOME>/antigravity-acp/settings.json`; no dummy acpx credential is needed.
+Keep the same profile and credential-storage configuration used during sign-in.
+`AGY_ACP_FORCE_FILE_STORAGE=1` selects profile-local credential storage.
+
+### Standalone user questions
+
+The standalone runtime sends fixed-choice user questions through `session/request_permission`
 with an `interaction_` tool-call ID. Their options represent answers, not tool
 approvals. acpx cancels these requests and reports that a user answer is required,
 including under `--approve-all` or an embedding host's permission handler.
