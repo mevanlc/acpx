@@ -30,6 +30,7 @@ acpx [global_options] cancel [-s <name>]
 acpx [global_options] set-mode <mode> [-s <name>]
 acpx [global_options] set <key> <value> [-s <name>]
 acpx [global_options] status [-s <name>]
+acpx [global_options] probe
 acpx [global_options] sessions [list | new [--name <name>] | ensure [--name <name>] | close [name] | show [name] | history [name] [--limit <count>] | watch [-s <name>] [--cursor <cursor>] | export [name] --output <path> | import <archive> [--name <name>] [--cwd <dir>]]
 acpx [global_options] config [show | init]
 
@@ -40,6 +41,7 @@ acpx [global_options] <agent> cancel [-s <name>]
 acpx [global_options] <agent> set-mode <mode> [-s <name>]
 acpx [global_options] <agent> set <key> <value> [-s <name>]
 acpx [global_options] <agent> status [-s <name>]
+acpx [global_options] <agent> probe
 acpx [global_options] <agent> sessions [list | new [--name <name>] | ensure [--name <name>] | close [name] | show [name] | history [name] [--limit <count>] | watch [-s <name>] [--cursor <cursor>] | export [name] --output <path> | import <archive> [--name <name>] [--cwd <dir>]]
 ```
 
@@ -436,6 +438,67 @@ session.
 
 Status checks are local and PID-based (`kill(pid, 0)` semantics). Cached session
 PIDs are not reported unless a live queue-owner lease ties them to the session.
+
+## `probe` command
+
+```bash
+acpx --format json <agent> probe
+acpx --format json probe                # uses the configured default agent
+acpx --agent '<command>' probe
+```
+
+Starts the agent and collects its ACP initialization metadata, then creates a
+session to discover its advertised models. It closes the connection without
+sending a prompt or saving an acpx session record.
+The agent may retain the discovery session in its native history. Configure the
+agent's authentication first; acpx's configured authentication credentials and
+`--auth-policy` also apply.
+
+Model discovery supports both model session config options and legacy `models`
+metadata. JSON output is a single object:
+
+```json
+{
+  "action": "probe",
+  "agent": "codex",
+  "agentInfo": { "name": "codex-acp", "version": "1.0.0" },
+  "protocolVersion": 1,
+  "agentCapabilities": { "loadSession": true },
+  "authMethods": [{ "id": "sign-in", "name": "Sign in" }],
+  "models": {
+    "currentModelId": "model-1",
+    "availableModelIds": ["model-1"],
+    "availableModels": [{ "modelId": "model-1", "name": "Model 1" }]
+  }
+}
+```
+
+The four initialization fields retain ACP's names and structures, including
+agent-provided metadata:
+
+| Field               | Meaning                                                                     |
+| ------------------- | --------------------------------------------------------------------------- |
+| `agentInfo`         | Responding ACP adapter identity and reported version.                       |
+| `protocolVersion`   | Negotiated ACP version.                                                     |
+| `agentCapabilities` | Advertised input types, session operations, MCP transports, and extensions. |
+| `authMethods`       | Advertised authentication methods; this does not establish login status.    |
+
+Optional initialization fields are `null` when absent; advertised empty objects
+and arrays remain empty. Capabilities are those advertised to the discovery
+client, whose filesystem and terminal capabilities are disabled.
+
+If the agent advertises no model catalog, `models` is `null` and the command
+succeeds. Startup, authentication, and protocol failures use the normal CLI error
+output and exit codes. Text output shows the initialization fields as key/value
+lines with JSON values, followed by the selected model and available IDs and
+names. Quiet output prints one available model ID per line, or nothing when no
+catalog is advertised.
+
+`--cwd` selects the discovery working directory. `--timeout` sets the discovery
+deadline, defaulting to 120 seconds when no timeout is configured. Cleanup is
+awaited on success, failure, timeout, and interruption. Discovery disables ACP
+filesystem and terminal capabilities and denies permission requests. It does not
+apply `--model` or other prompt/session settings.
 
 ## `config` command
 

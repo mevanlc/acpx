@@ -5,6 +5,7 @@
 - Upstream: https://github.com/agentclientprotocol/codex-acp
 - ACPX owns the built-in package range so fresh launches use the repository-selected stable adapter line without requiring a global install.
 - Runtime controls exposed by current codex-acp releases include ACP modes plus separate `model` and `reasoning_effort` session config options.
+- Use `acpx --format json codex probe` to discover advertised models before choosing one, along with adapter identity, protocol version, capabilities, and authentication methods. It sends no prompt and saves no acpx session; see [`probe`](../docs/CLI.md#probe-command) for output and lifecycle details.
 - Use the advertised base model id with `acpx --model <id> codex ...` or `acpx codex set model <id>`, then set reasoning effort separately with `acpx codex set reasoning_effort <value>`.
 - For a one-shot run, use `acpx --model <id> codex exec --config-option reasoning_effort=<value> 'prompt'`; the effort is applied after the model and before the prompt.
 - In flows, an `acp` node can declare `modelId` and `configOptions: [{ configId: "reasoning_effort", value: "medium" }]` to apply both before its first prompt. `flow run --config-option reasoning_effort=medium` supplies a run default. Persistent handles retain their initial settings; use another handle for different selections. Check the bundle settings and the adapter turn receipt.

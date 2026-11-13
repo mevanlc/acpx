@@ -43,6 +43,7 @@ project configuration.
 ## Sessions and models
 
 ```bash
+acpx --format json antigravity probe
 acpx antigravity sessions new --name work
 acpx antigravity -s work set model <advertised-model-id>
 acpx antigravity -s work 'Summarize this workspace'
@@ -52,6 +53,11 @@ Available models depend on the signed-in account. Use the exact model IDs
 advertised in the session configuration; do not infer them from another Google
 client or silently substitute an unavailable model. acpx uses its existing ACP
 session reconnect and model configuration support.
+
+`probe` also reports the server's identity and version, negotiated ACP version,
+capabilities, and advertised authentication methods. Authentication methods do
+not establish login status. See [`probe`](../docs/CLI.md#probe-command) for the
+output fields.
 
 ## User questions
 

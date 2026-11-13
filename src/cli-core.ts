@@ -35,6 +35,7 @@ type SkillflagModule = typeof import("skillflag");
 const TOP_LEVEL_VERBS = new Set([
   "prompt",
   "exec",
+  "probe",
   "cancel",
   "compare",
   "flow",

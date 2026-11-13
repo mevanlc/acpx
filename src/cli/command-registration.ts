@@ -39,6 +39,7 @@ import {
   type SessionsPruneFlags,
   type StatusFlags,
 } from "./flags.js";
+import { registerProbeCommand } from "./probe-command.js";
 import { registerStatusCommand } from "./status-command.js";
 
 type FlowRunFlags = {
@@ -290,6 +291,7 @@ export function registerSharedAgentSubcommands(
   });
 
   registerStatusCommand(parent, explicitAgentName, config, descriptions.status);
+  registerProbeCommand(parent, explicitAgentName, config);
 }
 
 export function registerAgentCommand(

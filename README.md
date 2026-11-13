@@ -93,9 +93,12 @@ acpx codex sessions new --name backend
 acpx codex -s backend "trace the checkout timeout"
 acpx codex exec "summarize this repository"
 acpx --model gpt-5.4 codex exec --config-option reasoning_effort=high "review this repository"
+acpx --format json codex probe
 ```
 
 Session state lives under `~/.acpx/`. The [sessions guide](docs/sessions.md) covers scope, queue ownership, reconnects, export/import, cancellation, and cleanup.
+
+Use [`probe`](docs/CLI.md#probe-command) to discover an agent's available models, reported identity, protocol version, capabilities, and authentication methods without sending a prompt or saving an acpx session.
 
 ## Automation and permissions
 

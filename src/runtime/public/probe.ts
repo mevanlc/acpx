@@ -1,7 +1,9 @@
+import type { InitializeResponse } from "@agentclientprotocol/sdk";
 import { normalizeAgentCommandInput } from "../../acp/client-process.js";
 import { AcpClient } from "../../acp/client.js";
 import { DEFAULT_AGENT_NAME } from "../../agent-registry.js";
 import { TimeoutError } from "../../async-control.js";
+import type { AcpClientOptions } from "../../types.js";
 import type { AcpRuntimeOptions, AcpRuntimeSessionModels } from "./contract.js";
 
 export type RuntimeHealthReport = {
@@ -14,8 +16,11 @@ export type ProbeRuntimeDeps = {
   clientFactory?: (options: ConstructorParameters<typeof AcpClient>[0]) => AcpClient;
 };
 
-export type InspectAgentModelsOptions = {
-  agentCommand: string[];
+export type InspectAgentModelsOptions = Pick<
+  AcpClientOptions,
+  "authCredentials" | "authPolicy" | "verbose" | "suppressSdkConsoleErrors"
+> & {
+  agentCommand: string | readonly string[];
   cwd: string;
   signal?: AbortSignal;
   /** Positive startup/session discovery deadline; defaults to 120 seconds. Cleanup is awaited. */
@@ -28,6 +33,11 @@ export type InspectAgentModelsOptions = {
   agentProcessEnvBlock?: readonly string[];
 };
 
+export type AgentProbeResult = Pick<
+  InitializeResponse,
+  "agentInfo" | "protocolVersion" | "agentCapabilities" | "authMethods"
+> & { models?: AcpRuntimeSessionModels };
+
 /**
  * Inspect session model metadata without a runtime store or prompt. The agent
  * may create native session history; only its owned transport is closed.
@@ -35,6 +45,11 @@ export type InspectAgentModelsOptions = {
 export async function inspectAgentModels(
   options: InspectAgentModelsOptions,
 ): Promise<AcpRuntimeSessionModels | undefined> {
+  return (await inspectAgent(options)).models;
+}
+
+/** Inspect ACP initialization metadata and models using one temporary session. */
+export async function inspectAgent(options: InspectAgentModelsOptions): Promise<AgentProbeResult> {
   options.signal?.throwIfAborted();
   const timeoutMs = options.timeoutMs ?? 120_000;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 2_147_483_647) {
@@ -51,6 +66,10 @@ export async function inspectAgentModels(
     agentProcessEnv: options.agentProcessEnv,
     agentProcessEnvAllow: options.agentProcessEnvAllow,
     agentProcessEnvBlock: options.agentProcessEnvBlock,
+    authCredentials: options.authCredentials,
+    authPolicy: options.authPolicy,
+    verbose: options.verbose,
+    suppressSdkConsoleErrors: options.suppressSdkConsoleErrors,
     permissionMode: "deny-all",
     nonInteractivePermissions: "deny",
     fs: false,
@@ -70,15 +89,25 @@ export async function inspectAgentModels(
     assertActive();
     await client.start();
     assertActive();
+    const initialized = client.initializeResult;
+    if (!initialized) {
+      throw new Error("Agent did not return ACP initialization metadata");
+    }
     const { models } = await client.createSession();
     assertActive();
-    return models
-      ? {
-          currentModelId: models.currentModelId,
-          availableModelIds: models.availableModels.map((model) => model.modelId),
-          availableModels: models.availableModels,
-        }
-      : undefined;
+    return {
+      agentInfo: initialized.agentInfo,
+      protocolVersion: initialized.protocolVersion,
+      agentCapabilities: initialized.agentCapabilities,
+      authMethods: initialized.authMethods,
+      models: models
+        ? {
+            currentModelId: models.currentModelId,
+            availableModelIds: models.availableModels.map((model) => model.modelId),
+            availableModels: models.availableModels,
+          }
+        : undefined,
+    };
   })();
   try {
     return await Promise.race([inspection, aborted]);

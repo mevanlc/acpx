@@ -6,6 +6,11 @@ Repo: https://github.com/openclaw/acpx
 
 ## Unreleased
 
+### Changes
+
+- CLI: add `acpx <agent> probe` to discover available models without sending a prompt or saving an acpx session, with JSON, text, and quiet output.
+- CLI: include ACP adapter identity, negotiated protocol version, capabilities, and advertised authentication methods in `probe` output.
+
 ### Fixes
 
 - Sessions: keep tool result text that agents report through ACP `content` blocks when they send no `rawOutput`, so saved sessions and the embedded runtime no longer record those results as empty. Thanks @saariuslystoned.

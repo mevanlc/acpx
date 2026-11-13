@@ -166,6 +166,11 @@ This means it is always safe to call these from scripts without worrying about w
 
 ## Embedded agent discovery
 
+For CLI discovery of models, identity, protocol version, capabilities, and
+authentication methods, use `acpx --format json <agent> probe`. This starts the
+adapter and creates a discovery session without prompting or saving an acpx
+record. See [`probe`](CLI.md#probe-command) for output and lifecycle details.
+
 Import `createAgentRegistry` from `acpx/agent-registry` to inspect agents without loading the runtime engine. The existing `acpx/runtime` export remains available.
 
 `createAgentRegistry({ overrides })` supplies `inspect(agentId)` for checking installed launch entrypoints. A result contains the canonical `id`, display `name`, and either `launch: { kind: "installed", argv }` or `launch: { kind: "missing", requirements }`. Each missing requirement names a command or package. Inspection checks known entrypoints and prerequisites; it does not audit the behavior of arbitrary custom programs. Inspection performs filesystem lookup only; it does not start an agent, install packages, authenticate, or acquire a model catalog.

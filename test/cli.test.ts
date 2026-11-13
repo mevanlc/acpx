@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { InvalidArgumentError } from "commander";
 import { AGENT_REGISTRY } from "../src/agent-registry.js";
@@ -3468,6 +3470,271 @@ test("exec subcommand works when disableExec is false", async () => {
 
     // exec should work (exit code 0) since disableExec is false
     assert.equal(result.code, 0, result.stderr);
+  });
+});
+
+for (const route of ["config", "legacy"] as const) {
+  test(`probe discovers ${route} models for a configured agent without saving a session`, async () => {
+    await withTempHome(async (homeDir) => {
+      const configDir = path.join(homeDir, ".acpx");
+      await fs.mkdir(configDir);
+      await fs.writeFile(
+        path.join(configDir, "config.json"),
+        JSON.stringify({
+          defaultAgent: "fixture",
+          agents: {
+            fixture: {
+              argv: [
+                process.execPath,
+                MOCK_AGENT_PATH,
+                route === "config" ? "--advertise-models" : "--advertise-legacy-models",
+              ],
+            },
+          },
+        }),
+      );
+      const result = await runCli(
+        ["--cwd", homeDir, "--format", "json", "--json-strict", "fixture", "probe"],
+        homeDir,
+      );
+      assert.equal(result.code, 0, result.stdout + result.stderr);
+      assert.equal(result.stderr, "");
+      const payload = JSON.parse(result.stdout.trim()) as {
+        action: string;
+        agent: string;
+        agentInfo: unknown;
+        protocolVersion: number;
+        agentCapabilities: unknown;
+        authMethods: unknown;
+        models: {
+          currentModelId: string;
+          availableModelIds: string[];
+          availableModels: Array<{ modelId: string; name: string }>;
+        };
+      };
+      assert.equal(payload.action, "probe");
+      assert.equal(payload.agent, "fixture");
+      assert.equal(payload.agentInfo, null);
+      assert.equal(payload.protocolVersion, 1);
+      assert.deepEqual(payload.agentCapabilities, {
+        promptCapabilities: { image: true, audio: true, embeddedContext: true },
+      });
+      assert.deepEqual(payload.authMethods, []);
+      assert.equal(payload.models.currentModelId, "default-model");
+      assert.deepEqual(
+        payload.models.availableModelIds,
+        route === "config"
+          ? ["default-model", "fast-model", "smart-model", "gpt-5.4", "gpt-5.2"]
+          : ["default-model", "alternate-model"],
+      );
+      assert.deepEqual(payload.models.availableModels[0], {
+        modelId: "default-model",
+        name: route === "config" ? "default-model" : "Default Model",
+      });
+      assert.deepEqual(await fs.readdir(configDir), ["config.json"]);
+
+      const implicit = await runCli(["--cwd", homeDir, "--format", "json", "probe"], homeDir);
+      assert.equal(implicit.code, 0, implicit.stdout + implicit.stderr);
+      assert.deepEqual(JSON.parse(implicit.stdout.trim()), payload);
+    });
+  });
+}
+
+test("probe supports raw commands and text and quiet model output", async () => {
+  await withTempHome(async (homeDir) => {
+    const args = ["--cwd", homeDir, "--agent", `${MOCK_AGENT_COMMAND} --advertise-legacy-models`];
+    const text = await runCli([...args, "probe"], homeDir);
+    assert.equal(text.code, 0, text.stderr);
+    assert.equal(
+      text.stdout,
+      'agentInfo: null\nprotocolVersion: 1\nagentCapabilities: {"promptCapabilities":{"image":true,"audio":true,"embeddedContext":true}}\nauthMethods: []\nmodel: default-model\navailableModels:\n  default-model\tDefault Model\n  alternate-model\tAlternate Model\n',
+    );
+    const quiet = await runCli([...args, "--format", "quiet", "probe"], homeDir);
+    assert.equal(quiet.code, 0, quiet.stderr);
+    assert.equal(quiet.stdout, "default-model\nalternate-model\n");
+    assert.equal(quiet.stderr, "");
+    assert.equal(await fileExists(path.join(homeDir, ".acpx", "sessions")), false);
+  });
+});
+
+test("probe distinguishes an unadvertised catalog from an agent failure", async () => {
+  await withTempHome(async (homeDir) => {
+    const args = ["--cwd", homeDir, "--format", "json", "--json-strict", "--agent"];
+    const missing = await runCli([...args, MOCK_AGENT_COMMAND, "probe"], homeDir);
+    assert.equal(missing.code, 0, missing.stdout + missing.stderr);
+    assert.equal(missing.stderr, "");
+    assert.deepEqual(JSON.parse(missing.stdout.trim()), {
+      action: "probe",
+      agent: "codex",
+      agentInfo: null,
+      protocolVersion: 1,
+      agentCapabilities: {
+        promptCapabilities: { image: true, audio: true, embeddedContext: true },
+      },
+      authMethods: [],
+      models: null,
+    });
+
+    const failed = await runCli([...args, path.join(homeDir, "missing-agent"), "probe"], homeDir);
+    assert.notEqual(failed.code, 0);
+    assert.equal(failed.stderr, "");
+    assert.ok(parseSingleAcpErrorLine(failed.stdout).message);
+  });
+});
+
+test("probe preserves advertised identity, capabilities, and authentication methods without models", async () => {
+  await withTempHome(async (homeDir) => {
+    const fixturePath = fileURLToPath(
+      new URL("./fixtures/probe-metadata-agent.js", import.meta.url),
+    );
+    const result = await runCli(
+      [
+        "--cwd",
+        homeDir,
+        "--format",
+        "json",
+        "--json-strict",
+        "--auth-policy",
+        "skip",
+        "--agent",
+        `node ${JSON.stringify(fixturePath)}`,
+        "probe",
+      ],
+      homeDir,
+    );
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    assert.equal(result.stderr, "");
+    const payload = JSON.parse(result.stdout.trim()) as Record<string, unknown>;
+    assert.deepEqual(payload.agentInfo, {
+      name: "probe-fixture",
+      title: "Probe Fixture",
+      version: "1.2.3",
+      _meta: { fixture: { build: 17 } },
+    });
+    assert.equal(payload.protocolVersion, 1);
+    assert.deepEqual(payload.agentCapabilities, {
+      loadSession: true,
+      promptCapabilities: { image: true, audio: false, embeddedContext: true },
+      mcpCapabilities: { http: true, sse: false },
+      sessionCapabilities: { list: {}, close: {} },
+      _meta: { fixture: { capability: "custom" } },
+    });
+    assert.deepEqual(payload.authMethods, [
+      {
+        id: "fixture-oauth",
+        name: "Sign in",
+        description: "Use the cached account",
+        _meta: { fixture: { provider: "test" } },
+      },
+    ]);
+    assert.equal(payload.models, null);
+    assert.equal(await fileExists(path.join(homeDir, ".acpx", "sessions")), false);
+
+    const minimal = await runCli(
+      [
+        "--cwd",
+        homeDir,
+        "--format",
+        "json",
+        "--agent",
+        `node ${JSON.stringify(fixturePath)} --minimal`,
+        "probe",
+      ],
+      homeDir,
+    );
+    assert.equal(minimal.code, 0, minimal.stdout + minimal.stderr);
+    assert.deepEqual(JSON.parse(minimal.stdout.trim()), {
+      action: "probe",
+      agent: "codex",
+      agentInfo: null,
+      protocolVersion: 1,
+      agentCapabilities: null,
+      authMethods: null,
+      models: null,
+    });
+  });
+});
+
+test("probe honors the discovery timeout and cleans up the adapter", async () => {
+  await withTempHome(async (homeDir) => {
+    const pidFile = path.join(homeDir, "probe.pid");
+    const result = await runCli(
+      [
+        "--cwd",
+        homeDir,
+        "--format",
+        "json",
+        "--json-strict",
+        "--timeout",
+        "1",
+        "--agent",
+        `${MOCK_AGENT_COMMAND} --hang-on-new-session --pid-file ${JSON.stringify(pidFile)}`,
+        "probe",
+      ],
+      homeDir,
+      { timeoutMs: 10_000 },
+    );
+    assert.equal(result.code, 3, result.stdout + result.stderr);
+    assert.equal(result.stderr, "");
+    assert.equal(parseSingleAcpErrorLine(result.stdout).data?.acpxCode, "TIMEOUT");
+    const pid = Number(await fs.readFile(pidFile, "utf8"));
+    assert.throws(() => process.kill(pid, 0), { code: "ESRCH" });
+    assert.equal(await fileExists(path.join(homeDir, ".acpx", "sessions")), false);
+  });
+});
+
+test("probe interruption waits for adapter cleanup", { timeout: 10_000 }, async () => {
+  await withTempHome(async (homeDir) => {
+    const pidFile = path.join(homeDir, "probe.pid");
+    const child = spawn(
+      process.execPath,
+      [
+        CLI_PATH,
+        "--cwd",
+        homeDir,
+        "--format",
+        "json",
+        "--agent",
+        `${MOCK_AGENT_COMMAND} --hang-on-new-session --pid-file ${JSON.stringify(pidFile)}`,
+        "probe",
+      ],
+      { env: { ...process.env, HOME: homeDir }, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    const closed = once(child, "close");
+    let stdout = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.resume();
+    let pid: number | undefined;
+    const cleanup = async () => {
+      stopProcess(child);
+      if (pid) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            throw error;
+          }
+        }
+      }
+      await closed;
+    };
+    try {
+      const deadline = Date.now() + 5_000;
+      while (!(await fileExists(pidFile)) && Date.now() < deadline) {
+        await delay(20);
+      }
+      pid = Number(await fs.readFile(pidFile, "utf8"));
+      assert.ok(pid > 0);
+      child.kill("SIGINT");
+      const [code] = await closed;
+      assert.equal(code, 130);
+      assert.equal(stdout, "");
+      assert.throws(() => process.kill(pid!, 0), { code: "ESRCH" });
+    } finally {
+      await cleanup();
+    }
   });
 });
 

@@ -254,6 +254,7 @@ acpx sessions import backend-session.json --name backend-restored
 acpx sessions prune --dry-run --older-than 7
 acpx sessions prune --older-than 30 --include-history
 acpx status
+acpx --format json probe
 
 acpx codex sessions
 acpx codex sessions new --name backend
@@ -265,10 +266,12 @@ acpx codex sessions export backend --output backend-session.json
 acpx codex sessions import backend-session.json --name backend-restored
 acpx codex sessions prune --before 2026-04-01 --include-history
 acpx codex status
+acpx --format json codex probe
 ```
 
 Behavior:
 
+- `probe` discovers live advertised models through a temporary ACP session without sending a prompt or saving an acpx record. JSON returns `action: "probe"`, `agent`, `models`, and the native ACP initialization fields `agentInfo`, `protocolVersion`, `agentCapabilities`, and `authMethods`. Optional initialization fields are `null` when absent; advertised empty objects/arrays and nested metadata are preserved. `authMethods` reports advertised sign-in methods, not login status. `models` contains `currentModelId`, `availableModelIds`, and native `{ modelId, name }` entries in `availableModels`, or is `null` when no catalog is advertised. Treat IDs as opaque. Text output includes the initialization fields; quiet output remains one model ID per line. The configured default agent and raw `--agent` commands are supported. Authentication and `--timeout` apply; the default discovery deadline is 120 seconds. Cleanup is awaited, ACP filesystem/terminal access is disabled, and permission requests are denied. The agent may retain native session history. Use `status` for saved metadata instead.
 - `sessions` and `sessions list` are equivalent
 - `sessions list` uses ACP `session/list` when the agent advertises it; JSON
   includes agent `SessionInfo`, `_meta`, and `nextCursor`
